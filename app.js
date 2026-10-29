@@ -11,7 +11,7 @@ const COLORS = ["#ffffff", "#111111", "#e2336b", "#d62828", "#f4a261", "#2a9d8f"
 const DEFAULTS = {
   mode: "text", text: "", font: "Be Vietnam Pro", bold: true, italic: false, outline: true,
   badge: false, color: "#ffffff", badgeColor: "#e2336b", logo: null, knockout: false,
-  pos: "br", x: 0.5, y: 0.5, size: 30, opacity: 85, rotate: 0, shopee: false
+  pos: "br", x: 0.5, y: 0.5, size: 30, opacity: 85, rotate: 0, shopee: false, vary: false
 };
 const KEY = "dongdau-settings";
 const EXPORT_MAX = 4096;   // giới hạn canvas an toàn trên iPhone
@@ -238,6 +238,7 @@ function syncUI() {
     $("#" + k + "v").textContent = S[k] + (k === "rotate" ? "°" : "%");
   }
   $("#shopee").checked = S.shopee;
+  $("#vary").checked = S.vary;
   $("#go").disabled = !files.length;
   $("#go").textContent = files.length ? `✨ Tạo ${files.length} ảnh` : "✨ Chọn ảnh ở bước 1 trước";
 }
@@ -265,6 +266,7 @@ $$(".tabs button").forEach(b => b.onclick = () => set({ mode: b.dataset.mode }))
 $("#text").oninput = e => set({ text: e.target.value });
 $("#knockout").onchange = e => set({ knockout: e.target.checked });
 $("#shopee").onchange = e => set({ shopee: e.target.checked });
+$("#vary").onchange = e => set({ vary: e.target.checked });
 for (const k of ["size", "opacity", "rotate"]) $("#" + k).oninput = e => set({ [k]: +e.target.value });
 $$(".pos button").forEach(b => b.onclick = () => {
   const p = b.dataset.pos;
@@ -317,7 +319,7 @@ $("#go").onclick = async () => {
   for (let i = 0; i < files.length; i++) {
     try {
       const bm = await createImageBitmap(files[i]);
-      const c = await render(bm, EXPORT_MAX, true);
+      const c = await render(bm, EXPORT_MAX, S.vary);
       bm.close();
       const blob = await encode(c);
       c.width = c.height = 0;   // giải phóng bộ nhớ trên điện thoại
