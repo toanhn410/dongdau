@@ -1,5 +1,5 @@
 // Cho phép mở app khi không có mạng và cài vào màn hình chính.
-const VERSION = "dongdau-v3";
+const VERSION = "dongdau-v4";
 const SHELL = ["./", "./index.html", "./app.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", e => {

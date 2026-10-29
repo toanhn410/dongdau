@@ -11,7 +11,7 @@ const COLORS = ["#ffffff", "#111111", "#e2336b", "#d62828", "#f4a261", "#2a9d8f"
 const DEFAULTS = {
   mode: "text", text: "", font: "Be Vietnam Pro", bold: true, italic: false, outline: true,
   badge: false, color: "#ffffff", badgeColor: "#e2336b", logo: null, knockout: false,
-  pos: "br", x: 0.5, y: 0.5, size: 30, opacity: 85, rotate: 0, shopee: false, vary: false
+  pos: "br", x: 0.5, y: 0.5, size: 30, opacity: 85, rotate: 0, shopee: false, vary: false, blend: false
 };
 const KEY = "dongdau-settings";
 const EXPORT_MAX = 4096;   // giới hạn canvas an toàn trên iPhone
@@ -59,7 +59,7 @@ async function textStamp(L) {
   ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
   lines.forEach((line, i) => {
     const y = H / 2 + (i - (lines.length - 1) / 2) * lineH;
-    if (S.outline) {
+    if (S.outline && !S.blend) {   // khi hoà vân, viền cứng làm mất vẻ tự nhiên; viền dập nổi thay thế
       ctx.strokeStyle = luminance(S.color) > 0.5 ? "rgba(0,0,0,.6)" : "rgba(255,255,255,.85)";
       ctx.lineWidth = Math.max(2, fs * 0.09);
       ctx.strokeText(line, W / 2, y);
@@ -125,10 +125,12 @@ function variation(on) {
   return { dx: r(0.03), dy: r(0.03), ds: 1 + r(0.08), dr: r(4), da: 1 + r(0.12) };
 }
 
+// Vẽ dấu lên ctx; trả về khung chữ nhật (đã tính xoay) mà dấu chiếm.
 function drawStamp(ctx, W, H, st, v) {
   ctx.save();
   ctx.globalAlpha = Math.min(1, Math.max(0.05, S.opacity / 100 * v.da));
   const rot = (S.rotate + v.dr) * Math.PI / 180;
+  let box = { x0: 0, y0: 0, x1: W, y1: H };
   if (S.pos === "tile") {
     const step = Math.max(st.width, st.height) * 1.5, rowH = st.height * 2.6;
     ctx.translate(W / 2 + v.dx * step * 10, H / 2 + v.dy * rowH * 10); ctx.rotate(rot);
@@ -142,8 +144,35 @@ function drawStamp(ctx, W, H, st, v) {
     cy = Math.min(H - st.height / 2, Math.max(st.height / 2, cy + v.dy * H));
     ctx.translate(cx, cy); ctx.rotate(rot);
     ctx.drawImage(st, -st.width / 2, -st.height / 2);
+    const c = Math.abs(Math.cos(rot)), s = Math.abs(Math.sin(rot));
+    const hw = (st.width * c + st.height * s) / 2, hh = (st.width * s + st.height * c) / 2;
+    box = { x0: cx - hw, y0: cy - hh, x1: cx + hw, y1: cy + hh };
   }
   ctx.restore();
+  return box;
+}
+
+// "Hoà vào vân ảnh": như in màu lên vải. Màu dấu được nhân với độ sáng tương đối của ảnh bên dưới
+// (sáng điểm ảnh / sáng trung bình cả vùng dấu), nên nếp gấp, sợi vải, bóng đổ vẫn hiện xuyên qua dấu.
+function printOnto(ctx, mask, W, H, box) {
+  const x0 = Math.max(0, Math.floor(box.x0)), y0 = Math.max(0, Math.floor(box.y0));
+  const w = Math.min(W, Math.ceil(box.x1)) - x0, h = Math.min(H, Math.ceil(box.y1)) - y0;
+  if (w <= 0 || h <= 0) return;
+  const img = ctx.getImageData(x0, y0, w, h), p = img.data;
+  const m = mask.getContext("2d").getImageData(x0, y0, w, h).data;
+  const lum = i => 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2];
+  let sum = 0, wsum = 0;
+  for (let i = 0; i < p.length; i += 4) if (m[i + 3]) { sum += lum(i) * m[i + 3]; wsum += m[i + 3]; }
+  if (!wsum) return;
+  // Độ sáng trung bình ứng với 88% màu gốc, để chỗ sáng hơn trung bình vẫn còn chỗ sáng lên (không cháy trắng)
+  const ref = sum / wsum / 0.88 + 1;
+  for (let i = 0; i < p.length; i += 4) {
+    const a = m[i + 3] / 255;
+    if (!a) continue;
+    const shade = Math.min(1.6, Math.max(0.35, lum(i) / ref));
+    for (let k = 0; k < 3; k++) p[i + k] = p[i + k] * (1 - a) + Math.min(255, m[i + k] * shade) * a;
+  }
+  ctx.putImageData(img, x0, y0);
 }
 
 // Cắt (nếu Shopee) → thu nhỏ → vẽ ảnh → đóng dấu
@@ -159,7 +188,12 @@ async function render(src, maxSide, vary = false) {
   ctx.drawImage(src, sx, sy, sw, sh, 0, 0, W, H);
   const v = variation(vary);
   const st = await buildStamp(S.size / 100 * Math.min(W, H) * v.ds);
-  if (st) drawStamp(ctx, W, H, st, v);
+  if (st) {
+    if (S.blend) {
+      const mask = canvas(W, H);
+      printOnto(ctx, mask, W, H, drawStamp(mask.getContext("2d"), W, H, st, v));
+    } else drawStamp(ctx, W, H, st, v);
+  }
   return c;
 }
 
@@ -221,7 +255,8 @@ function drawPreview() {
 
 // ---------- Giao diện ----------
 function syncUI() {
-  $$(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.mode === S.mode));
+  $$(".tabs button[data-mode]").forEach(b => b.classList.toggle("on", b.dataset.mode === S.mode));
+  $$(".tabs button[data-blend]").forEach(b => b.classList.toggle("on", (b.dataset.blend === "1") === S.blend));
   $("#pane-logo").hidden = S.mode !== "logo";
   $("#pane-text").hidden = S.mode !== "text";
   $("#text").value = S.text;
@@ -261,7 +296,8 @@ $("#fonts").addEventListener("click", e => { const b = e.target.closest("button"
 swatches($("#colors"), "color");
 swatches($("#bcolors"), "badgeColor");
 
-$$(".tabs button").forEach(b => b.onclick = () => set({ mode: b.dataset.mode }));
+$$(".tabs button[data-mode]").forEach(b => b.onclick = () => set({ mode: b.dataset.mode }));
+$$(".tabs button[data-blend]").forEach(b => b.onclick = () => set({ blend: b.dataset.blend === "1" }));
 ["bold", "italic", "outline", "badge"].forEach(k => $("#" + k).onclick = () => set({ [k]: !S[k] }));
 $("#text").oninput = e => set({ text: e.target.value });
 $("#knockout").onchange = e => set({ knockout: e.target.checked });
