@@ -116,19 +116,30 @@ function center(W, H, st) {
   }
 }
 
-function drawStamp(ctx, W, H, st) {
+// Mỗi ảnh xuất ra lệch dấu một chút (vị trí, cỡ, góc, độ rõ). Nếu cả loạt ảnh có dấu y hệt nhau
+// ở cùng một chỗ, phần mềm có thể so các ảnh để tách dấu ra và xoá sạch hàng loạt
+// (Dekel và cộng sự, "On the Effectiveness of Visible Watermarks", CVPR 2017).
+function variation(on) {
+  if (!on) return { dx: 0, dy: 0, ds: 1, dr: 0, da: 1 };
+  const r = a => (Math.random() * 2 - 1) * a;
+  return { dx: r(0.03), dy: r(0.03), ds: 1 + r(0.08), dr: r(4), da: 1 + r(0.12) };
+}
+
+function drawStamp(ctx, W, H, st, v) {
   ctx.save();
-  ctx.globalAlpha = S.opacity / 100;
-  const rot = S.rotate * Math.PI / 180;
+  ctx.globalAlpha = Math.min(1, Math.max(0.05, S.opacity / 100 * v.da));
+  const rot = (S.rotate + v.dr) * Math.PI / 180;
   if (S.pos === "tile") {
     const step = Math.max(st.width, st.height) * 1.5, rowH = st.height * 2.6;
-    ctx.translate(W / 2, H / 2); ctx.rotate(rot);
+    ctx.translate(W / 2 + v.dx * step * 10, H / 2 + v.dy * rowH * 10); ctx.rotate(rot);
     const R = Math.hypot(W, H) / 2 + step;
     for (let y = -R, row = 0; y < R; y += rowH, row++)
       for (let x = -R + (row % 2) * step / 2; x < R; x += step)
         ctx.drawImage(st, x - st.width / 2, y - st.height / 2);
   } else {
-    const [cx, cy] = center(W, H, st);
+    let [cx, cy] = center(W, H, st);
+    cx = Math.min(W - st.width / 2, Math.max(st.width / 2, cx + v.dx * W));
+    cy = Math.min(H - st.height / 2, Math.max(st.height / 2, cy + v.dy * H));
     ctx.translate(cx, cy); ctx.rotate(rot);
     ctx.drawImage(st, -st.width / 2, -st.height / 2);
   }
@@ -136,7 +147,7 @@ function drawStamp(ctx, W, H, st) {
 }
 
 // Cắt (nếu Shopee) → thu nhỏ → vẽ ảnh → đóng dấu
-async function render(src, maxSide) {
+async function render(src, maxSide, vary = false) {
   let sx = 0, sy = 0, sw = src.width, sh = src.height;
   if (S.shopee) { const m = Math.min(sw, sh); sx = (sw - m) / 2; sy = (sh - m) / 2; sw = sh = m; }
   const cap = S.shopee ? Math.min(maxSide, SHOPEE_MAX) : maxSide;
@@ -146,8 +157,9 @@ async function render(src, maxSide) {
   ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, W, H);           // ảnh PNG trong suốt → nền trắng khi lưu JPEG
   ctx.imageSmoothingQuality = "high";
   ctx.drawImage(src, sx, sy, sw, sh, 0, 0, W, H);
-  const st = await buildStamp(S.size / 100 * Math.min(W, H));
-  if (st) drawStamp(ctx, W, H, st);
+  const v = variation(vary);
+  const st = await buildStamp(S.size / 100 * Math.min(W, H) * v.ds);
+  if (st) drawStamp(ctx, W, H, st, v);
   return c;
 }
 
@@ -305,7 +317,7 @@ $("#go").onclick = async () => {
   for (let i = 0; i < files.length; i++) {
     try {
       const bm = await createImageBitmap(files[i]);
-      const c = await render(bm, EXPORT_MAX);
+      const c = await render(bm, EXPORT_MAX, true);
       bm.close();
       const blob = await encode(c);
       c.width = c.height = 0;   // giải phóng bộ nhớ trên điện thoại
