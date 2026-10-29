@@ -125,54 +125,76 @@ function variation(on) {
   return { dx: r(0.03), dy: r(0.03), ds: 1 + r(0.08), dr: r(4), da: 1 + r(0.12) };
 }
 
-// Vẽ dấu lên ctx; trả về khung chữ nhật (đã tính xoay) mà dấu chiếm.
-function drawStamp(ctx, W, H, st, v) {
-  ctx.save();
-  ctx.globalAlpha = Math.min(1, Math.max(0.05, S.opacity / 100 * v.da));
+// Vị trí và khung chữ nhật (đã tính xoay) của dấu; phủ kín thì khung là cả ảnh.
+function placement(W, H, st, v) {
   const rot = (S.rotate + v.dr) * Math.PI / 180;
-  let box = { x0: 0, y0: 0, x1: W, y1: H };
+  if (S.pos === "tile") return { rot, box: { x0: 0, y0: 0, x1: W, y1: H } };
+  let [cx, cy] = center(W, H, st);
+  cx = Math.min(W - st.width / 2, Math.max(st.width / 2, cx + v.dx * W));
+  cy = Math.min(H - st.height / 2, Math.max(st.height / 2, cy + v.dy * H));
+  const c = Math.abs(Math.cos(rot)), s = Math.abs(Math.sin(rot));
+  const hw = (st.width * c + st.height * s) / 2, hh = (st.width * s + st.height * c) / 2;
+  return { rot, cx, cy, box: { x0: cx - hw, y0: cy - hh, x1: cx + hw, y1: cy + hh } };
+}
+
+// Vẽ dấu lên ctx; (ox, oy) là góc trên-trái của ctx trong toạ độ ảnh, để vẽ được lên một mảnh nhỏ.
+function drawStamp(ctx, W, H, st, v, ox = 0, oy = 0) {
+  const pl = placement(W, H, st, v);
+  ctx.save();
+  ctx.translate(-ox, -oy);
+  ctx.globalAlpha = Math.min(1, Math.max(0.05, S.opacity / 100 * v.da));
   if (S.pos === "tile") {
     const step = Math.max(st.width, st.height) * 1.5, rowH = st.height * 2.6;
-    ctx.translate(W / 2 + v.dx * step * 10, H / 2 + v.dy * rowH * 10); ctx.rotate(rot);
+    ctx.translate(W / 2 + v.dx * step * 10, H / 2 + v.dy * rowH * 10); ctx.rotate(pl.rot);
     const R = Math.hypot(W, H) / 2 + step;
     for (let y = -R, row = 0; y < R; y += rowH, row++)
       for (let x = -R + (row % 2) * step / 2; x < R; x += step)
         ctx.drawImage(st, x - st.width / 2, y - st.height / 2);
   } else {
-    let [cx, cy] = center(W, H, st);
-    cx = Math.min(W - st.width / 2, Math.max(st.width / 2, cx + v.dx * W));
-    cy = Math.min(H - st.height / 2, Math.max(st.height / 2, cy + v.dy * H));
-    ctx.translate(cx, cy); ctx.rotate(rot);
+    ctx.translate(pl.cx, pl.cy); ctx.rotate(pl.rot);
     ctx.drawImage(st, -st.width / 2, -st.height / 2);
-    const c = Math.abs(Math.cos(rot)), s = Math.abs(Math.sin(rot));
-    const hw = (st.width * c + st.height * s) / 2, hh = (st.width * s + st.height * c) / 2;
-    box = { x0: cx - hw, y0: cy - hh, x1: cx + hw, y1: cy + hh };
   }
   ctx.restore();
-  return box;
 }
 
 // "Hoà vào vân ảnh": như in màu lên vải. Màu dấu được nhân với độ sáng tương đối của ảnh bên dưới
 // (sáng điểm ảnh / sáng trung bình cả vùng dấu), nên nếp gấp, sợi vải, bóng đổ vẫn hiện xuyên qua dấu.
-function printOnto(ctx, mask, W, H, box) {
+// Chỉ xử lý khung của dấu, theo từng dải 256 dòng, để không cấp thêm bộ nhớ cỡ cả ảnh (iPhone dễ tràn).
+const STRIP = 256;
+function printStamp(ctx, W, H, st, v) {
+  const { box } = placement(W, H, st, v);
   const x0 = Math.max(0, Math.floor(box.x0)), y0 = Math.max(0, Math.floor(box.y0));
   const w = Math.min(W, Math.ceil(box.x1)) - x0, h = Math.min(H, Math.ceil(box.y1)) - y0;
   if (w <= 0 || h <= 0) return;
-  const img = ctx.getImageData(x0, y0, w, h), p = img.data;
-  const m = mask.getContext("2d").getImageData(x0, y0, w, h).data;
-  const lum = i => 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2];
+
+  // Độ sáng trung bình dưới dấu, ước lượng trên bản thu nhỏ (cạnh dài tối đa 512px)
+  const k = Math.min(1, 512 / Math.max(w, h));
+  const sw = Math.max(1, Math.round(w * k)), sh = Math.max(1, Math.round(h * k));
+  const small = canvas(sw, sh), smallMask = canvas(sw, sh), mctx = smallMask.getContext("2d");
+  small.getContext("2d").drawImage(ctx.canvas, x0, y0, w, h, 0, 0, sw, sh);
+  mctx.scale(k, k); drawStamp(mctx, W, H, st, v, x0, y0);
+  const sp = small.getContext("2d").getImageData(0, 0, sw, sh).data, sm = mctx.getImageData(0, 0, sw, sh).data;
   let sum = 0, wsum = 0;
-  for (let i = 0; i < p.length; i += 4) if (m[i + 3]) { sum += lum(i) * m[i + 3]; wsum += m[i + 3]; }
+  for (let i = 0; i < sp.length; i += 4) if (sm[i + 3]) { sum += (0.299 * sp[i] + 0.587 * sp[i + 1] + 0.114 * sp[i + 2]) * sm[i + 3]; wsum += sm[i + 3]; }
   if (!wsum) return;
   // Độ sáng trung bình ứng với 88% màu gốc, để chỗ sáng hơn trung bình vẫn còn chỗ sáng lên (không cháy trắng)
   const ref = sum / wsum / 0.88 + 1;
-  for (let i = 0; i < p.length; i += 4) {
-    const a = m[i + 3] / 255;
-    if (!a) continue;
-    const shade = Math.min(1.6, Math.max(0.35, lum(i) / ref));
-    for (let k = 0; k < 3; k++) p[i + k] = p[i + k] * (1 - a) + Math.min(255, m[i + k] * shade) * a;
+
+  const mask = canvas(w, Math.min(STRIP, h)), mx = mask.getContext("2d");
+  for (let y = y0; y < y0 + h; y += STRIP) {
+    const hh = Math.min(STRIP, y0 + h - y);
+    mx.clearRect(0, 0, w, mask.height);
+    drawStamp(mx, W, H, st, v, x0, y);
+    const img = ctx.getImageData(x0, y, w, hh), p = img.data;
+    const m = mx.getImageData(0, 0, w, hh).data;
+    for (let i = 0; i < p.length; i += 4) {
+      const a = m[i + 3] / 255;
+      if (!a) continue;
+      const shade = Math.min(1.6, Math.max(0.35, (0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2]) / ref));
+      for (let c = 0; c < 3; c++) p[i + c] = p[i + c] * (1 - a) + Math.min(255, m[i + c] * shade) * a;
+    }
+    ctx.putImageData(img, x0, y);
   }
-  ctx.putImageData(img, x0, y0);
 }
 
 // Cắt (nếu Shopee) → thu nhỏ → vẽ ảnh → đóng dấu
@@ -188,12 +210,7 @@ async function render(src, maxSide, vary = false) {
   ctx.drawImage(src, sx, sy, sw, sh, 0, 0, W, H);
   const v = variation(vary);
   const st = await buildStamp(S.size / 100 * Math.min(W, H) * v.ds);
-  if (st) {
-    if (S.blend) {
-      const mask = canvas(W, H);
-      printOnto(ctx, mask, W, H, drawStamp(mask.getContext("2d"), W, H, st, v));
-    } else drawStamp(ctx, W, H, st, v);
-  }
+  if (st) (S.blend ? printStamp : drawStamp)(ctx, W, H, st, v);
   return c;
 }
 
