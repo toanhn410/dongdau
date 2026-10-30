@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Tạo mã mở khoá – Đóng Dấu Ảnh</title>
+<style>
+  body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; background: #f6f3f5; color: #221b20; }
+  .wrap { max-width: 520px; margin: 0 auto; padding: 16px 12px 40px; }
+  h1 { font-size: 20px; color: #e2336b; }
+  .card { background: #fff; border-radius: 14px; padding: 14px; margin-top: 12px; }
+  label { display: block; font-weight: 600; margin: 10px 0 4px; }
+  input, select, textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 16px; padding: 10px; border: 1px solid #e7dde3; border-radius: 10px; }
+  button { width: 100%; margin-top: 12px; padding: 13px; border: 0; border-radius: 12px; background: #e2336b; color: #fff; font: inherit; font-weight: 700; font-size: 16px; cursor: pointer; }
+  button.alt { background: #fff; color: #e2336b; border: 2px solid #e2336b; }
+  .muted { color: #7b6f77; font-size: 14px; }
+  .out { word-break: break-all; white-space: pre-wrap; background: #f6f3f5; padding: 10px; border-radius: 10px; font-family: ui-monospace, monospace; font-size: 13px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🔑 Tạo mã mở khoá</h1>
+  <p class="muted">Trang dành riêng cho chủ app. Không có khoá bí mật thì trang này không tạo được mã.</p>
+
+  <div class="card" id="keycard">
+    <label for="priv">Khoá bí mật (chỉ dán một lần, trình duyệt này sẽ nhớ)</label>
+    <textarea id="priv" rows="4" placeholder='Dán nội dung file license-private.jwk.json'></textarea>
+    <button id="savekey">Lưu khoá</button>
+    <p class="muted" id="keymsg"></p>
+  </div>
+
+  <div class="card" id="issue" hidden>
+    <label for="dev">Mã thiết bị của khách</label>
+    <input id="dev" placeholder="Ví dụ: DD K7Q2-9MXA (dán cả nội dung chuyển khoản cũng được)">
+    <label for="days">Thời hạn</label>
+    <select id="days">
+      <option value="30">1 tháng (30 ngày)</option>
+      <option value="365">1 năm (365 ngày)</option>
+      <option value="7">7 ngày (tặng dùng thử)</option>
+    </select>
+    <label for="start">Tính từ ngày</label>
+    <input id="start" type="date">
+    <p class="muted">Khách gia hạn khi gói cũ chưa hết: chọn ngày hết hạn cũ để không bị mất ngày.</p>
+    <button id="make">Tạo mã</button>
+    <div id="result" hidden>
+      <label>Tin nhắn gửi khách qua Zalo</label>
+      <div class="out" id="msg"></div>
+      <button class="alt" id="copy">📋 Chép tin nhắn</button>
+      <p class="muted" id="exp"></p>
+    </div>
+    <button class="alt" id="forget" style="margin-top:24px">Xoá khoá khỏi trình duyệt này</button>
+  </div>
+</div>
+<script>
+"use strict";
+const APP_URL = "https://toanhn410.github.io/dongdau/";
+const ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+const EPOCH = Date.UTC(2026, 0, 1), DAY = 86400000;
+const STORE = "dongdau-admin-key";
+const $ = s => document.querySelector(s);
+let key = null;
+
+async function loadKey(jwkText) {
+  const jwk = JSON.parse(jwkText);
+  if (jwk.kty !== "EC" || jwk.crv !== "P-256" || !jwk.d) throw new Error("not a private key");
+  return crypto.subtle.importKey("jwk", jwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
+}
+
+async function boot() {
+  const saved = localStorage.getItem(STORE);
+  if (saved) { try { key = await loadKey(saved); } catch { localStorage.removeItem(STORE); } }
+  $("#keycard").hidden = !!key; $("#issue").hidden = !key;
+  $("#start").value = new Date().toISOString().slice(0, 10);
+}
+
+$("#savekey").onclick = async () => {
+  try { key = await loadKey($("#priv").value.trim()); localStorage.setItem(STORE, $("#priv").value.trim()); $("#priv").value = ""; boot(); }
+  catch { $("#keymsg").textContent = "Không phải khoá bí mật hợp lệ."; }
+};
+$("#forget").onclick = () => { localStorage.removeItem(STORE); key = null; boot(); };
+
+function parseDevice(s) {
+  const t = s.toUpperCase().replace(/^\s*DD\b/, "").replace(/[\s-]/g, "").replace(/O/g, "0").replace(/[IL]/g, "1");
+  return /^[0-9A-HJKMNP-TV-Z]{8}$/.test(t) ? t : null;
+}
+
+function idBytes(id) {
+  let n = 0n;
+  for (const ch of id) n = n * 32n + BigInt(ALPHABET.indexOf(ch));
+  const out = new Uint8Array(5);
+  for (let i = 4; i >= 0; i--) { out[i] = Number(n & 255n); n >>= 8n; }
+  return out;
+}
+
+const b64url = u => btoa(String.fromCharCode(...u)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+$("#make").onclick = async () => {
+  const id = parseDevice($("#dev").value);
+  if (!id) { alert("Mã thiết bị phải gồm 8 ký tự, ví dụ K7Q2-9MXA."); return; }
+  const [y, m, d] = $("#start").value.split("-").map(Number);
+  const startDay = Math.floor((Date.UTC(y, m - 1, d) - EPOCH) / DAY);
+  const last = startDay + Number($("#days").value) - 1;
+  if (startDay < 0 || last > 65535) { alert("Ngày không hợp lệ."); return; }
+  const payload = new Uint8Array(8);
+  payload[0] = 1; payload.set(idBytes(id), 1); payload[6] = last >> 8; payload[7] = last & 255;
+  const sig = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, payload));
+  const code = new Uint8Array(72); code.set(payload); code.set(sig, 8);
+  const link = APP_URL + "#key=" + b64url(code);
+  const endText = new Date(EPOCH + last * DAY).toLocaleDateString("vi-VN", { timeZone: "UTC" });
+  $("#msg").textContent = `Cảm ơn bạn đã ủng hộ Đóng Dấu Ảnh! Bấm vào link dưới đây để mở khoá (dùng đúng trình duyệt bạn hay đóng dấu ảnh). Gói dùng không giới hạn đến hết ngày ${endText}.\n${link}\nNếu link mở trong Zalo không được: bấm ⋯ → Mở bằng trình duyệt, hoặc chép link dán vào ô "Nhập mã mở khoá" trong app.`;
+  $("#exp").textContent = `Mã cho thiết bị ${id.slice(0, 4)}-${id.slice(4)}, hết hạn sau ngày ${endText}.`;
+  $("#result").hidden = false;
+};
+$("#copy").onclick = async () => { await navigator.clipboard.writeText($("#msg").textContent); $("#copy").textContent = "✅ Đã chép"; setTimeout(() => $("#copy").textContent = "📋 Chép tin nhắn", 1500); };
+
+boot();
+</script>
+</body>
+</html>

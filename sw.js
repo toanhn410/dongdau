@@ -1,9 +1,12 @@
 // Cho phép mở app khi không có mạng và cài vào màn hình chính.
-const VERSION = "dongdau-v6";
-const SHELL = ["./", "./index.html", "./app.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
+const VERSION = "dongdau-v7";
+const SHELL = ["./", "./index.html", "./license.js", "./app.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 
+// cache: "reload" để không lấy nhầm bản cũ còn trong bộ nhớ đệm HTTP của trình duyệt
 self.addEventListener("install", e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(VERSION)
+    .then(c => c.addAll(SHELL.map(u => new Request(u, { cache: "reload" }))))
+    .then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", e => {

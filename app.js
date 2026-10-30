@@ -364,29 +364,74 @@ $("#pv").addEventListener("pointerup", () => { dragging = false; });
 // ---------- Xuất ảnh ----------
 function outName(f) { return f.name.replace(/\.[^.]+$/, "") + "-dongdau.jpg"; }
 
+// ---------- Gói sử dụng ----------
+const fmtDate = d => d.toLocaleDateString("vi-VN", { timeZone: "UTC" });   // ngày hết hạn ghi theo UTC, khớp trang admin
+const fmtMoney = n => n.toLocaleString("vi-VN") + "đ";
+
+function planStatus() {
+  const el = $("#planstatus");
+  if (Plan.licensed()) el.textContent = `🔓 Đã mở khoá, dùng không giới hạn đến hết ${fmtDate(new Date(Plan.until() - 1))}`;
+  else if (!Plan.active()) el.textContent = "🎁 Giai đoạn dùng thử: miễn phí không giới hạn";
+  else el.textContent = `Hôm nay còn ${Plan.remaining()}/${PAYWALL.freePerDay} ảnh miễn phí`;
+  $("#devid").textContent = Plan.prettyId();
+}
+
+function showPay(title) {
+  $("#paytitle").textContent = title || `Hôm nay bạn đã dùng hết ${PAYWALL.freePerDay} ảnh miễn phí`;
+  const pick = i => {
+    $$("#plans button").forEach((b, j) => b.classList.toggle("on", i === j));
+    $("#qr").src = Plan.qrUrl(PAYWALL.plans[i]);
+  };
+  $("#plans").innerHTML = PAYWALL.plans.map(p => `<button><b>${fmtMoney(p.price)}</b>${p.label}</button>`).join("");
+  $$("#plans button").forEach((b, i) => b.onclick = () => pick(i));
+  pick(0);
+  $("#paynote").textContent = Plan.transferNote();
+  $("#paystep").innerHTML = `Quét mã QR bằng app ngân hàng (đã điền sẵn số tiền và nội dung). Chuyển xong, gửi ảnh xác nhận qua Zalo <b>${PAYWALL.zalo}</b>. Bạn sẽ nhận một đường link, bấm vào là mở khoá.`;
+  $("#pay").hidden = false;
+}
+$("#payclose").onclick = () => { $("#pay").hidden = true; };
+
+const KEY_ERRORS = {
+  invalid: "Mã không đúng. Hãy dán lại nguyên văn mã hoặc đường link đã nhận.",
+  device: "Mã này dành cho thiết bị khác. Hãy mở link bằng đúng trình duyệt bạn hay dùng để đóng dấu, hoặc dán mã vào ô này trên trình duyệt đó.",
+  expired: "Mã đã hết hạn."
+};
+function keyResult(r) {
+  $("#keymsg").textContent = r.error ? KEY_ERRORS[r.error] : `✅ Đã mở khoá đến hết ${fmtDate(new Date(r.until - 1))}.`;
+  planStatus();
+}
+$("#keygo").onclick = async () => keyResult(await Plan.activate($("#keyin").value));
+
 $("#go").onclick = async () => {
   if (S.mode === "logo" && !S.logo) { alert("Bạn chưa chọn file logo ở bước 2."); return; }
+  const quota = Plan.remaining();
+  if (quota === 0) { showPay(); return; }
+  const batch = files.slice(0, Math.min(files.length, quota));
   $("#go").disabled = true; $("#done").hidden = true; $("#prog").hidden = false;
   outputs.forEach(o => URL.revokeObjectURL(o.url)); outputs = [];
   const failed = [];
-  for (let i = 0; i < files.length; i++) {
+  for (let i = 0; i < batch.length; i++) {
     try {
-      const bm = await createImageBitmap(files[i]);
+      const bm = await createImageBitmap(batch[i]);
       const c = await render(bm, EXPORT_MAX, S.vary);
       bm.close();
       const blob = await encode(c);
       c.width = c.height = 0;   // giải phóng bộ nhớ trên điện thoại
-      const file = new File([blob], outName(files[i]), { type: "image/jpeg" });
+      const file = new File([blob], outName(batch[i]), { type: "image/jpeg" });
       outputs.push({ file, url: URL.createObjectURL(blob) });
-    } catch { failed.push(files[i].name); }
-    $("#prog div").style.width = ((i + 1) / files.length * 100) + "%";
+    } catch { failed.push(batch[i].name); }
+    $("#prog div").style.width = ((i + 1) / batch.length * 100) + "%";
   }
+  Plan.addUsed(outputs.length);
+  planStatus();
   $("#results").innerHTML = outputs.map(o => `<a href="${o.url}" download="${o.file.name}"><img src="${o.url}" alt=""></a>`).join("");
   $("#prog").hidden = true; $("#done").hidden = false; $("#go").disabled = false;
   const canShare = navigator.canShare && navigator.canShare({ files: outputs.map(o => o.file) });
   $("#share").hidden = !canShare; $("#sharehint").hidden = !canShare;
   if (failed.length) alert("Không đọc được " + failed.length + " ảnh: " + failed.join(", "));
   $("#done").scrollIntoView({ behavior: "smooth" });
+  if (batch.length < files.length)
+    showPay(`Đã đóng dấu ${batch.length} ảnh. Còn ${files.length - batch.length} ảnh vượt mức ${PAYWALL.freePerDay} ảnh miễn phí hôm nay`);
 };
 
 $("#share").onclick = async () => {
@@ -411,4 +456,12 @@ $("#install").onclick = async () => { if (!installEvt) return; installEvt.prompt
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 
 syncUI();
+planStatus();
 document.fonts.ready.then(loadPreview);
+// Bấm link mở khoá (…/#key=…) → tự kích hoạt, kể cả khi app đang mở sẵn
+function showLinkResult(r) {
+  if (r) { $("#keymsg").closest("details").open = true; keyResult(r); $("#keymsg").scrollIntoView(); }
+  planStatus();
+}
+Plan.init().then(showLinkResult);
+addEventListener("hashchange", () => Plan.fromHash().then(showLinkResult));
