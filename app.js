@@ -402,10 +402,16 @@ function keyResult(r) {
 }
 $("#keygo").onclick = async () => keyResult(await Plan.activate($("#keyin").value));
 
+// Thống kê ẩn danh (GoatCounter): chỉ đếm sự kiện, không gửi ảnh hay thông tin cá nhân
+function track(path, title) {
+  try { window.goatcounter && window.goatcounter.count && window.goatcounter.count({ path, title: title || path, event: true }); } catch {}
+}
+const bucket = n => n <= 1 ? "1" : n <= 5 ? "2-5" : n <= 10 ? "6-10" : n <= 20 ? "11-20" : "21+";
+
 $("#go").onclick = async () => {
   if (S.mode === "logo" && !S.logo) { alert("Bạn chưa chọn file logo ở bước 2."); return; }
   const quota = Plan.remaining();
-  if (quota === 0) { showPay(); return; }
+  if (quota === 0) { track("bang-thu-tien/het-luot"); showPay(); return; }
   const batch = files.slice(0, Math.min(files.length, quota));
   $("#go").disabled = true; $("#done").hidden = true; $("#prog").hidden = false;
   outputs.forEach(o => URL.revokeObjectURL(o.url)); outputs = [];
@@ -423,6 +429,12 @@ $("#go").onclick = async () => {
     $("#prog div").style.width = ((i + 1) / batch.length * 100) + "%";
   }
   Plan.addUsed(outputs.length);
+  if (outputs.length) {
+    track("tao-anh", "Bấm Tạo ảnh");
+    track("so-anh/" + bucket(outputs.length), "Số ảnh mỗi lượt: " + bucket(outputs.length));
+    track("kieu/" + (S.mode === "logo" ? "logo" : "chu") + "-" + (S.blend ? "hoa-van" : "phu-len") + (S.pos === "tile" ? "-phu-kin" : ""));
+    if (S.shopee) track("tuy-chon/shopee");
+  }
   planStatus();
   $("#results").innerHTML = outputs.map(o => `<a href="${o.url}" download="${o.file.name}"><img src="${o.url}" alt=""></a>`).join("");
   $("#prog").hidden = true; $("#done").hidden = false; $("#go").disabled = false;
@@ -430,8 +442,10 @@ $("#go").onclick = async () => {
   $("#share").hidden = !canShare; $("#sharehint").hidden = !canShare;
   if (failed.length) alert("Không đọc được " + failed.length + " ảnh: " + failed.join(", "));
   $("#done").scrollIntoView({ behavior: "smooth" });
-  if (batch.length < files.length)
+  if (batch.length < files.length) {
+    track("bang-thu-tien/vuot-muc");
     showPay(`Đã đóng dấu ${batch.length} ảnh. Còn ${files.length - batch.length} ảnh vượt mức ${PAYWALL.freePerDay} ảnh miễn phí hôm nay`);
+  }
 };
 
 $("#share").onclick = async () => {

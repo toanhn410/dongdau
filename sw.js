@@ -1,5 +1,5 @@
 // Cho phép mở app khi không có mạng và cài vào màn hình chính.
-const VERSION = "dongdau-v7";
+const VERSION = "dongdau-v8";
 const SHELL = ["./", "./index.html", "./license.js", "./app.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 
 // cache: "reload" để không lấy nhầm bản cũ còn trong bộ nhớ đệm HTTP của trình duyệt
@@ -18,6 +18,7 @@ self.addEventListener("activate", e => {
 // Trả bản đã lưu ngay, đồng thời tải bản mới về cho lần mở sau.
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
+  if (new URL(e.request.url).origin !== location.origin && !e.request.url.startsWith("https://fonts.")) return;   // không lưu đệm bộ đếm thống kê, mã QR
   e.respondWith(caches.open(VERSION).then(async cache => {
     const cached = await cache.match(e.request);
     const fresh = fetch(e.request).then(res => {
