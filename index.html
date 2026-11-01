@@ -67,6 +67,11 @@
   .results { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 12px 0; }
   .results a { display: block; }
   .results img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; display: block; }
+  .thumbs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px; }
+  .th { position: relative; border-radius: 8px; overflow: hidden; border: 2px solid transparent; cursor: pointer; background: var(--bg); }
+  .th.on { border-color: var(--p); }
+  .th img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+  .th .x { position: absolute; top: 3px; right: 3px; width: 26px; height: 26px; border-radius: 50%; border: 0; background: rgba(0,0,0,.6); color: #fff; font-size: 14px; line-height: 26px; padding: 0; cursor: pointer; }
   .progress { height: 8px; background: var(--bg); border-radius: 99px; overflow: hidden; margin-top: 10px; }
   .progress div { height: 100%; width: 0; background: var(--p); transition: width .2s; }
   footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 24px; }
@@ -95,8 +100,10 @@
 
   <section class="card">
     <h2>1. Chọn ảnh sản phẩm</h2>
-    <label class="big">📷 Chọn ảnh từ máy<input id="files" type="file" accept="image/*" multiple hidden></label>
+    <label class="big"><span id="picktxt">📷 Chọn ảnh từ máy</span><input id="files" type="file" accept="image/*" multiple hidden></label>
     <p class="muted" id="count">Chưa chọn ảnh nào. Có thể chọn nhiều ảnh một lúc.</p>
+    <div class="thumbs" id="thumbs"></div>
+    <div class="row" id="filebar" hidden><button class="toggle" id="clearall">🗑️ Bỏ hết ảnh</button></div>
   </section>
 
   <section class="card">

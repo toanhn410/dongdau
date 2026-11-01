@@ -1,5 +1,5 @@
 // Cho phép mở app khi không có mạng và cài vào màn hình chính.
-const VERSION = "dongdau-v9";
+const VERSION = "dongdau-v10";
 const SHELL = ["./", "./index.html", "./license.js", "./app.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 
 // cache: "reload" để không lấy nhầm bản cũ còn trong bộ nhớ đệm HTTP của trình duyệt

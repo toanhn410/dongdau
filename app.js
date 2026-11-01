@@ -244,6 +244,7 @@ function samplePhoto() {
 }
 
 async function loadPreview() {
+  renderThumbs();
   if (previewSrc && previewSrc.close) previewSrc.close();
   previewSrc = null;
   if (files.length) {
@@ -339,12 +340,48 @@ $("#logo").onchange = async e => {
   e.target.value = "";
 };
 
-$("#files").onchange = e => {
-  files = [...e.target.files].filter(f => f.type.startsWith("image/") || /\.(heic|heif)$/i.test(f.name));
-  current = 0;
-  $("#count").textContent = files.length ? `Đã chọn ${files.length} ảnh.` : "Chưa chọn ảnh nào.";
+// Danh sách ảnh: chọn thêm thì cộng dồn, bấm ✕ để bỏ từng ảnh, chạm ảnh nhỏ để xem trước ảnh đó
+const thumbUrl = new WeakMap();
+const thumbOf = f => { if (!thumbUrl.has(f)) thumbUrl.set(f, URL.createObjectURL(f)); return thumbUrl.get(f); };
+const fileKey = f => f.name + "|" + f.size + "|" + f.lastModified;
+
+function renderThumbs() {
+  $("#thumbs").innerHTML = files.map((f, i) =>
+    `<div class="th${i === current ? " on" : ""}" data-i="${i}"><img src="${thumbOf(f)}" alt=""><button class="x" data-x="${i}" aria-label="Bỏ ảnh này">✕</button></div>`).join("");
+}
+
+function refreshFiles() {
+  current = Math.min(current, Math.max(0, files.length - 1));
+  $("#count").textContent = files.length ? `Đã chọn ${files.length} ảnh. Bấm ✕ để bỏ ảnh không muốn đóng dấu.` : "Chưa chọn ảnh nào. Có thể chọn nhiều ảnh một lúc.";
+  $("#picktxt").textContent = files.length ? "➕ Thêm ảnh khác" : "📷 Chọn ảnh từ máy";
+  $("#filebar").hidden = !files.length;
   $("#done").hidden = true;
   syncUI(); loadPreview();
+}
+
+$("#files").onchange = e => {
+  const have = new Set(files.map(fileKey));
+  const added = [...e.target.files].filter(f => (f.type.startsWith("image/") || /\.(heic|heif)$/i.test(f.name)) && !have.has(fileKey(f)));
+  if (added.length) { files = files.concat(added); current = files.length - added.length; }
+  e.target.value = "";   // cho phép chọn lại đúng ảnh vừa bỏ
+  refreshFiles();
+};
+$("#thumbs").onclick = e => {
+  const x = e.target.closest("[data-x]");
+  if (x) {
+    const i = +x.dataset.x, [gone] = files.splice(i, 1);
+    if (thumbUrl.has(gone)) URL.revokeObjectURL(thumbUrl.get(gone));
+    if (i < current) current--;
+    refreshFiles();
+    return;
+  }
+  const th = e.target.closest("[data-i]");
+  if (th) { current = +th.dataset.i; loadPreview(); }
+};
+$("#clearall").onclick = () => {
+  files.forEach(f => thumbUrl.has(f) && URL.revokeObjectURL(thumbUrl.get(f)));
+  files = []; current = 0;
+  refreshFiles();
 };
 $("#prev").onclick = () => { current = (current - 1 + files.length) % files.length; loadPreview(); };
 $("#next").onclick = () => { current = (current + 1) % files.length; loadPreview(); };
