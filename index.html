@@ -31,6 +31,12 @@
   header h1 { margin: 0; font-size: 24px; color: var(--p); }
   header p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
   .notice { background: #fff4d6; border-radius: 12px; padding: 10px 12px; font-size: 14px; margin-top: 10px; }
+  .hero h1 { font-size: 25px; line-height: 1.25; color: var(--fg); }
+  .hero h1 em { font-style: normal; color: var(--p); }
+  .demo { display: block; width: 100%; height: auto; border-radius: 14px; margin-top: 10px; background: #fff; }
+  .gobar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); background: rgba(246,243,245,.96); box-shadow: 0 -2px 10px rgba(0,0,0,.08); }
+  .gobar .big { max-width: 536px; margin: 0 auto; }
+  body.has-bar .wrap { padding-bottom: 90px; }
   .card { background: #fff; border-radius: 16px; padding: 14px; margin-top: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
   .card h2 { margin: 0 0 10px; font-size: 17px; }
   .big { display: block; width: 100%; text-align: center; background: var(--p); color: #fff; border: 0; border-radius: 14px; padding: 15px; font: inherit; font-size: 17px; font-weight: 700; cursor: pointer; text-decoration: none; }
@@ -90,12 +96,10 @@
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <h1>📌 Đóng Dấu Ảnh</h1>
-    <p>Chèn logo hoặc tên shop vào nhiều ảnh cùng lúc. Ảnh xử lý ngay trên máy bạn, không gửi đi đâu.</p>
-    <div class="notice" id="inapp" hidden>Bạn đang mở trong Zalo/Facebook. Để lưu ảnh dễ hơn, bấm <b>⋯</b> ở góc trên rồi chọn <b>Mở bằng trình duyệt</b>.</div>
-    <div class="notice" id="ioshint" hidden>Mẹo: bấm nút <b>Chia sẻ</b> của Safari → <b>Thêm vào MH chính</b> để lần sau mở như một ứng dụng.</div>
-    <button class="big alt" id="install" hidden style="margin-top:10px">📲 Cài vào màn hình chính</button>
+  <header class="hero">
+    <h1>Đóng tên shop lên ảnh, <em>hết lo bị lấy ảnh</em></h1>
+    <p>Miễn phí · không cần cài app · làm cả loạt ảnh trong 1 phút</p>
+    <img class="demo" src="demo.jpg" width="1080" height="600" alt="Ảnh gốc và ảnh đã có tên shop">
   </header>
 
   <section class="card">
@@ -167,6 +171,7 @@
     <div class="progress" id="prog" hidden><div></div></div>
     <p class="status" id="planstatus"></p>
     <div id="done" hidden>
+      <div class="notice" id="inapp" hidden>Không lưu được ảnh? Bấm <b>⋯</b> ở góc trên → <b>Mở bằng trình duyệt</b>, rồi làm lại 1 lần nữa.</div>
       <div class="results" id="results"></div>
       <button class="big" id="share">📤 Lưu vào máy / Gửi Zalo</button>
       <p class="muted" id="sharehint">Trong bảng hiện ra, chọn <b>Lưu hình ảnh</b> để cất vào thư viện ảnh, hoặc chọn <b>Zalo</b> để gửi luôn.</p>
@@ -185,8 +190,11 @@
     </details>
   </section>
 
+  <div class="notice" id="ioshint" hidden>Mẹo: bấm nút <b>Chia sẻ</b> của Safari → <b>Thêm vào MH chính</b> để lần sau mở như một ứng dụng.</div>
+  <button class="big alt" id="install" hidden style="margin-top:10px">📲 Cài vào màn hình chính</button>
   <footer>Ảnh của bạn không rời khỏi điện thoại. © Đóng Dấu Ảnh</footer>
 </div>
+<div class="gobar" id="gobar" hidden><button class="big" id="go2"></button></div>
 
 <div class="modal" id="pay" hidden>
   <div class="sheet">

@@ -294,7 +294,19 @@ function syncUI() {
   $("#vary").checked = S.vary;
   $("#go").disabled = !files.length;
   $("#go").textContent = files.length ? `✨ Tạo ${files.length} ảnh` : "✨ Chọn ảnh ở bước 1 trước";
+  $("#go2").textContent = `✨ Tạo ${files.length} ảnh`;
+  updateBar();
 }
+
+// Nút "Tạo ảnh" nổi ở đáy màn hình khi đã chọn ảnh, để khỏi phải cuộn tìm nút ở cuối trang
+let goVisible = false;
+function updateBar() {
+  const show = files.length > 0 && $("#done").hidden && !goVisible;
+  $("#gobar").hidden = !show;
+  document.body.classList.toggle("has-bar", show);
+}
+new IntersectionObserver(es => { goVisible = es[0].isIntersecting; updateBar(); }).observe($("#go"));
+$("#go2").onclick = () => $("#go").click();
 
 function set(patch) {
   Object.assign(S, patch);
@@ -362,9 +374,15 @@ function refreshFiles() {
 $("#files").onchange = e => {
   const have = new Set(files.map(fileKey));
   const added = [...e.target.files].filter(f => (f.type.startsWith("image/") || /\.(heic|heif)$/i.test(f.name)) && !have.has(fileKey(f)));
+  const first = !files.length;
   if (added.length) { files = files.concat(added); current = files.length - added.length; }
   e.target.value = "";   // cho phép chọn lại đúng ảnh vừa bỏ
   refreshFiles();
+  if (added.length) {
+    track("chon-anh", "Đã chọn ảnh");
+    // lần đầu chọn ảnh: dẫn xuống ô gõ tên shop
+    if (first && S.mode === "text") setTimeout(() => { $("#text").scrollIntoView({ behavior: "smooth", block: "center" }); }, 300);
+  }
 };
 $("#thumbs").onclick = e => {
   const x = e.target.closest("[data-x]");
@@ -478,6 +496,7 @@ $("#go").onclick = async () => {
   const canShare = navigator.canShare && navigator.canShare({ files: outputs.map(o => o.file) });
   $("#share").hidden = !canShare; $("#sharehint").hidden = !canShare;
   if (failed.length) alert("Không đọc được " + failed.length + " ảnh: " + failed.join(", "));
+  updateBar();
   $("#done").scrollIntoView({ behavior: "smooth" });
   if (batch.length < files.length) {
     track("bang-thu-tien/vuot-muc");
