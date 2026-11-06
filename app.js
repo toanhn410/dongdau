@@ -367,6 +367,7 @@ function refreshFiles() {
   $("#count").textContent = files.length ? `Đã chọn ${files.length} ảnh. Bấm ✕ để bỏ ảnh không muốn đóng dấu.` : "Chưa chọn ảnh nào. Có thể chọn nhiều ảnh một lúc.";
   $("#picktxt").textContent = files.length ? "➕ Thêm ảnh khác" : "📷 Chọn ảnh từ máy";
   $("#filebar").hidden = !files.length;
+  $("#sample").hidden = files.length > 0;
   $("#done").hidden = true;
   syncUI(); loadPreview();
 }
@@ -383,6 +384,18 @@ $("#files").onchange = e => {
     // lần đầu chọn ảnh: dẫn xuống ô gõ tên shop
     if (first && S.mode === "text") setTimeout(() => { $("#text").scrollIntoView({ behavior: "smooth", block: "center" }); }, 300);
   }
+};
+// Khách chưa có ảnh trong tay: cho thử ngay với ảnh mẫu, thấy kết quả rồi mới cần ảnh thật
+$("#sample").onclick = async () => {
+  $("#sample").disabled = true;
+  try {
+    const blob = await (await fetch("mau.jpg")).blob();
+    files = [new File([blob], "anh-mau.jpg", { type: "image/jpeg", lastModified: 1 })];
+    current = 0;
+    refreshFiles();
+    track("thu-mau", "Thử với ảnh mẫu");
+    setTimeout(() => { $("#text").scrollIntoView({ behavior: "smooth", block: "center" }); $("#text").focus({ preventScroll: true }); }, 300);
+  } finally { $("#sample").disabled = false; }
 };
 $("#thumbs").onclick = e => {
   const x = e.target.closest("[data-x]");
